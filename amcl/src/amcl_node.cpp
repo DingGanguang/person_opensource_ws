@@ -162,7 +162,7 @@ class AmclNode
 #if NEW_UNIFORM_SAMPLING
     static std::vector<std::pair<int,int> > free_space_indices;
 #endif
-    // Callbacks
+    // Callbacks					回调函数声明
     bool globalLocalizationCallback(std_srvs::Empty::Request& req,
                                     std_srvs::Empty::Response& res);
     bool nomotionUpdateCallback(std_srvs::Empty::Request& req,
@@ -177,42 +177,42 @@ class AmclNode
 
     void handleMapMessage(const nav_msgs::OccupancyGrid& msg);
     void freeMapDependentMemory();
-    map_t* convertMap( const nav_msgs::OccupancyGrid& map_msg );
+    map_t* convertMap( const nav_msgs::OccupancyGrid& map_msg );		// 把订阅的map消息转换为map_t类型的地图
     void updatePoseFromServer();
     void applyInitialPose();
 
     //parameter for which odom to use
-    std::string odom_frame_id_;
+    std::string odom_frame_id_;			// odom 里程计坐标系
 
     //paramater to store latest odom pose
-    geometry_msgs::PoseStamped latest_odom_pose_;
+    geometry_msgs::PoseStamped latest_odom_pose_;			// latest最新的里程计位姿  latest_odom_pose_
 
     //parameter for which base to use
-    std::string base_frame_id_;
-    std::string global_frame_id_;
+    std::string base_frame_id_;			// base_link
+    std::string global_frame_id_;		// map 坐标系
 
-    bool use_map_topic_;
-    bool first_map_only_;
+    bool use_map_topic_;		
+    bool first_map_only_;		
 
     ros::Duration gui_publish_period;
     ros::Time save_pose_last_time;
     ros::Duration save_pose_period;
 
-    geometry_msgs::PoseWithCovarianceStamped last_published_pose;
+    geometry_msgs::PoseWithCovarianceStamped last_published_pose;			// 上一次发布的位姿last_published_pose;
 
-    map_t* map_;
-    char* mapdata;
+    map_t* map_;			// AMCL的地图指针
+    char* mapdata;			// map.data中的具体栅格数值
     int sx, sy;
-    double resolution;
-
+    double resolution;		// 分辨率
+// 与激光数据有关的 "订阅", 存储激光的vector，存储更新激光数据的vector
     message_filters::Subscriber<sensor_msgs::LaserScan>* laser_scan_sub_;
     tf2_ros::MessageFilter<sensor_msgs::LaserScan>* laser_scan_filter_;
-    ros::Subscriber initial_pose_sub_;
+    ros::Subscriber initial_pose_sub_;		// 初始位姿 订阅器
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
     std::map< std::string, int > frame_to_laser_;
 
-    // Particle filter
+    // Particle filter			//  粒子滤波器相关的变量
     pf_t *pf_;
     double pf_err_, pf_z_;
     bool pf_init_;
@@ -246,7 +246,7 @@ class AmclNode
     //basically defines how long a map->odom transform is good for
     ros::Duration transform_tolerance_;
 
-    ros::NodeHandle nh_;
+    ros::NodeHandle nh_;				// 节点，订阅和发布器
     ros::NodeHandle private_nh_;
     ros::Publisher pose_pub_;
     ros::Publisher particlecloud_pub_;
@@ -256,7 +256,7 @@ class AmclNode
     ros::Subscriber initial_pose_sub_old_;
     ros::Subscriber map_sub_;
 
-    diagnostic_updater::Updater diagnosic_updater_;
+    diagnostic_updater::Updater diagnosic_updater_;		//???
     void standardDeviationDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& diagnostic_status);
     double std_warn_level_x_;
     double std_warn_level_y_;
@@ -346,10 +346,10 @@ main(int argc, char** argv)
   return(0);
 }
 
-AmclNode::AmclNode() :
+AmclNode::AmclNode() :							// ##step01 构造函数
         sent_first_transform_(false),
         latest_tf_valid_(false),
-        map_(NULL),
+        map_(NULL),						// 
         pf_(NULL),
         resample_count_(0),
         odom_(NULL),
@@ -1126,10 +1126,10 @@ AmclNode::setMapCallback(nav_msgs::SetMap::Request& req,
 }
 
 void
-AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
+AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)		// laserscan订阅的回调
 {
   std::string laser_scan_frame_id = stripSlash(laser_scan->header.frame_id);
-  last_laser_received_ts_ = ros::Time::now();
+  last_laser_received_ts_ = ros::Time::now();		// 当前时间，赋值给  last_laser_received_ts
   if( map_ == NULL ) {
     return;
   }

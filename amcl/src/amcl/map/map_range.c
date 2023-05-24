@@ -86,7 +86,8 @@ double map_calc_range(map_t *map, double ox, double oy, double oa, double max_ra
 
   if(steep)
   {
-    if(!MAP_VALID(map,y,x) || map->cells[MAP_INDEX(map,y,x)].occ_state > -1)
+    if(!MAP_VALID(map,y,x) || map->cells[MAP_INDEX(map,y,x)].occ_state > -1)		
+	//如果栅格(y,x)超出栅格地图的范围，或者这个栅格处的占据值非空（未知和占据状态）  ；     则返回0 因为x=x0,y=y0
       return sqrt((x-x0)*(x-x0) + (y-y0)*(y-y0)) * map->scale;
   }
   else
@@ -95,7 +96,7 @@ double map_calc_range(map_t *map, double ox, double oy, double oa, double max_ra
       return sqrt((x-x0)*(x-x0) + (y-y0)*(y-y0)) * map->scale;
   }
 
-  while(x != (x1 + xstep * 1))
+  while(x != (x1 + xstep * 1))		// Bresenham 划线找当前最大扫描距离上的栅格占据值为0or1的那个栅格，并返回这个栅格与起始栅格间的距离
   {
     x += xstep;
     error += deltaerr;
@@ -103,7 +104,7 @@ double map_calc_range(map_t *map, double ox, double oy, double oa, double max_ra
     {
       y += ystep;
       error -= deltax;
-    }
+    }	
 
     if(steep)
     {
