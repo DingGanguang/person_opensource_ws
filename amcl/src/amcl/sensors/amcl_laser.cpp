@@ -93,7 +93,7 @@ AMCLLaser::SetModelLikelihoodField(double z_hit,
   this->z_rand = z_rand;
   this->sigma_hit = sigma_hit;
 
-  map_update_cspace(this->map, max_occ_dist);
+  map_update_cspace(this->map, max_occ_dist);   // 将传入的地图，更新cspace distance
 }
 
 void 
@@ -120,14 +120,14 @@ AMCLLaser::SetModelLikelihoodFieldProb(double z_hit,
 
 ////////////////////////////////////////////////////////////////////////////////
 // Apply the laser sensor model
-bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data)
+bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data)        // 传入data数据，和粒子滤波器，
 {
   if (this->max_beams < 2)
     return false;
 
   // Apply the laser sensor model
   if(this->model_type == LASER_MODEL_BEAM)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data);
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data);           // pf_sensor_model_fn_t 是函数指针
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD)
     pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel, data);  
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD_PROB)

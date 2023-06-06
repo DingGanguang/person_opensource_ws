@@ -48,15 +48,15 @@ class AMCLSensor
 
   // Update the filter based on the action model.  Returns true if the filter
   // has been updated.
-  public: virtual bool UpdateAction(pf_t *pf, AMCLSensorData *data);
+  public: virtual bool UpdateAction(pf_t *pf, AMCLSensorData *data);        // 虚函数UpdateAction：需要派生类对其进行重定义，在本类中，该方法的默认定义中返回false
 
   // Initialize the filter based on the sensor model.  Returns true if the
   // filter has been initialized.
-  public: virtual bool InitSensor(pf_t *pf, AMCLSensorData *data);
+  public: virtual bool InitSensor(pf_t *pf, AMCLSensorData *data);          // 虚函数InitSensor()
 
   // Update the filter based on the sensor model.  Returns true if the
   // filter has been updated.
-  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data);
+  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data);          // 虚函数 UpdateSensor()，默认返回false
 
   // Flag is true if this is the action sensor
   public: bool is_action;

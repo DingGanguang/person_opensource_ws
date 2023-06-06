@@ -14,7 +14,7 @@
 static int n = 3;
 #endif
 
-static double hypot2(double x, double y) {
+static double hypot2(double x, double y) {          // hypot2(x,y) 计算两个数的平方和再开平方
   return sqrt(x*x+y*y);
 }
 

@@ -49,25 +49,25 @@ typedef struct
 
 
 // Return a zero vector
-pf_vector_t pf_vector_zero();
+pf_vector_t pf_vector_zero();               // create 0 vector
 
 // Check for NAN or INF in any component
-int pf_vector_finite(pf_vector_t a);
+int pf_vector_finite(pf_vector_t a);                                // check vector 元素,nan INF
 
 // Print a vector
-void pf_vector_fprintf(pf_vector_t s, FILE *file, const char *fmt);
+void pf_vector_fprintf(pf_vector_t s, FILE *file, const char *fmt); // 想file中，按照fmt格式，输出打印向量内容；
 
 // Simple vector addition
-pf_vector_t pf_vector_add(pf_vector_t a, pf_vector_t b);
+pf_vector_t pf_vector_add(pf_vector_t a, pf_vector_t b);            // vector addition
 
 // Simple vector subtraction
-pf_vector_t pf_vector_sub(pf_vector_t a, pf_vector_t b);
+pf_vector_t pf_vector_sub(pf_vector_t a, pf_vector_t b);            // vector subtraction
 
 // Transform from local to global coords (a + b)
-pf_vector_t pf_vector_coord_add(pf_vector_t a, pf_vector_t b);
+pf_vector_t pf_vector_coord_add(pf_vector_t a, pf_vector_t b);      // vector add ??? 暂不理解
 
 // Transform from global to local coords (a - b)
-pf_vector_t pf_vector_coord_sub(pf_vector_t a, pf_vector_t b);
+pf_vector_t pf_vector_coord_sub(pf_vector_t a, pf_vector_t b);      // vector add ??? 暂不理解
 
 
 // Return a zero matrix
@@ -85,7 +85,7 @@ void pf_matrix_fprintf(pf_matrix_t s, FILE *file, const char *fmt);
 
 // Decompose a covariance matrix [a] into a rotation matrix [r] and a
 // diagonal matrix [d] such that a = r * d * r^T.
-void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a);
+void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a);      // 正交对角化
 
 #ifdef __cplusplus
 }

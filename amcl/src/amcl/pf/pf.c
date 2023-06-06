@@ -283,15 +283,15 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
   {
     // Normalize weights
     double w_avg=0.0;
-    for (i = 0; i < set->sample_count; i++)
+    for (i = 0; i < set->sample_count; i++) // 遍历所有粒子
     {
-      sample = set->samples + i;
-      w_avg += sample->weight;
-      sample->weight /= total;
-      set->n_effective += sample->weight*sample->weight;
+      sample = set->samples + i;        // 操作的当前粒子保存在sample指针中
+      w_avg += sample->weight;          // 权重求和
+      sample->weight /= total;          // ??? 当前粒子的权重修改为：权重/total ???
+      set->n_effective += sample->weight*sample->weight;    // 权重的平方和
     }
     // Update running averages of likelihood of samples (Prob Rob p258)
-    w_avg /= set->sample_count;
+    w_avg /= set->sample_count;     // 所有粒子的平均权重
     if(pf->w_slow == 0.0)
       pf->w_slow = w_avg;
     else

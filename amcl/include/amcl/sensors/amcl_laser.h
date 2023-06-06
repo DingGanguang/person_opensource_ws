@@ -35,121 +35,166 @@
 namespace amcl
 {
 
-typedef enum
-{
-  LASER_MODEL_BEAM,
-  LASER_MODEL_LIKELIHOOD_FIELD,
-  LASER_MODEL_LIKELIHOOD_FIELD_PROB
-} laser_model_t;
+    typedef enum
+    {
+        LASER_MODEL_BEAM,
+        LASER_MODEL_LIKELIHOOD_FIELD,
+        LASER_MODEL_LIKELIHOOD_FIELD_PROB
+    } laser_model_t;
 
-// Laser sensor data
-class AMCLLaserData : public AMCLSensorData
-{
-  public:
-    AMCLLaserData () {ranges=NULL;};
-    virtual ~AMCLLaserData() {delete [] ranges;};
-  // Laser range data (range, bearing tuples)
-  public: int range_count;
-  public: double range_max;
-  public: double (*ranges)[2];
-};
+    // Laser sensor data
+    class AMCLLaserData : public AMCLSensorData
+    {
+    public:
+        AMCLLaserData() { ranges = NULL; };
+        virtual ~AMCLLaserData() { delete[] ranges; };
+        // Laser range data (range, bearing tuples)
+    public:
+        int range_count;        // 三个数据成员 ：扫描点数、最大range、数组指针ranges (double *[2])
 
+    public:
+        double range_max;
 
-// Laseretric sensor model
-class AMCLLaser : public AMCLSensor
-{
-  // Default constructor
-  public: AMCLLaser(size_t max_beams, map_t* map);
+    public:
+        double (*ranges)[2];
+    };
 
-  public: virtual ~AMCLLaser(); 
+    // Laseretric sensor model
+    class AMCLLaser : public AMCLSensor
+    {
+        // Default constructor
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////        
+// 方法
+    public:
+        AMCLLaser(size_t max_beams, map_t *map);
 
-  public: void SetModelBeam(double z_hit,
-                            double z_short,
-                            double z_max,
-                            double z_rand,
-                            double sigma_hit,
-                            double lambda_short,
-                            double chi_outlier);
+    public:
+        virtual ~AMCLLaser();
 
-  public: void SetModelLikelihoodField(double z_hit,
-                                       double z_rand,
-                                       double sigma_hit,
-                                       double max_occ_dist);
+    public:
+        void SetModelBeam(double z_hit,
+                          double z_short,
+                          double z_max,
+                          double z_rand,
+                          double sigma_hit,
+                          double lambda_short,
+                          double chi_outlier);
 
-  //a more probabilistically correct model - also with the option to do beam skipping
-  public: void SetModelLikelihoodFieldProb(double z_hit,
-					   double z_rand,
-					   double sigma_hit,
-					   double max_occ_dist, 
-					   bool do_beamskip, 
-					   double beam_skip_distance, 
-					   double beam_skip_threshold, 
-					   double beam_skip_error_threshold);
+    public:
+        void SetModelLikelihoodField(double z_hit,
+                                     double z_rand,
+                                     double sigma_hit,
+                                     double max_occ_dist);
 
-  // Update the filter based on the sensor model.  Returns true if the
-  // filter has been updated.
-  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data);
+        // a more probabilistically correct model - also with the option to do beam skipping
+    public:
+        void SetModelLikelihoodFieldProb(double z_hit,
+                                         double z_rand,
+                                         double sigma_hit,
+                                         double max_occ_dist,
+                                         bool do_beamskip,
+                                         double beam_skip_distance,
+                                         double beam_skip_threshold,
+                                         double beam_skip_error_threshold);
 
-  // Set the laser's pose after construction
-  public: void SetLaserPose(pf_vector_t& laser_pose) 
-          {this->laser_pose = laser_pose;}
+        // Update the filter based on the sensor model.  Returns true if the
+        // filter has been updated.
+    public:
+        virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data);
 
-  // Determine the probability for the given pose
-  private: static double BeamModel(AMCLLaserData *data, 
-                                   pf_sample_set_t* set);
-  // Determine the probability for the given pose
-  private: static double LikelihoodFieldModel(AMCLLaserData *data, 
-                                              pf_sample_set_t* set);
+        // Set the laser's pose after construction
+    public:
+        void SetLaserPose(pf_vector_t &laser_pose)                      // 设置laser_pose变量
+        {
+            this->laser_pose = laser_pose;
+        }
 
-  // Determine the probability for the given pose - more probablistic model 
-  private: static double LikelihoodFieldModelProb(AMCLLaserData *data, 
-					     pf_sample_set_t* set);
+        // Determine the probability for the given pose                 // 计算给定的pose的概率值；三种模型的
+    private:
+        static double BeamModel(AMCLLaserData *data,
+                                pf_sample_set_t *set);
+        // Determine the probability for the given pose
+    private:
+        static double LikelihoodFieldModel(AMCLLaserData *data,         // 似然模型根据传感器数据计算概率
+                                           pf_sample_set_t *set);
 
-  private: void reallocTempData(int max_samples, int max_obs);
+        // Determine the probability for the given pose - more probablistic model
+    private:
+        static double LikelihoodFieldModelProb(AMCLLaserData *data,
+                                               pf_sample_set_t *set);
 
-  private: laser_model_t model_type;
+    private:
+        void reallocTempData(int max_samples, int max_obs);
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 数据成员
+    private:
+        laser_model_t model_type;
 
-  // Current data timestamp
-  private: double time;
+        // Current data timestamp
+    private:
+        double time;
 
-  // The laser map
-  private: map_t *map;
+        // The laser map
+    private:
+        map_t *map;                         // map_t * map；地图指针， 构造函数会传入一个map地图指针，操作那个地图
 
-  // Laser offset relative to robot
-  private: pf_vector_t laser_pose;
-  
-  // Max beams to consider
-  private: int max_beams;
+        // Laser offset relative to robot
+    private:
+        pf_vector_t laser_pose;             // laser pose 雷达相对于机器人的坐标位置？（雷达的安装位置？）
 
-  // Beam skipping parameters (used by LikelihoodFieldModelProb model)
-  private: bool do_beamskip; 
-  private: double beam_skip_distance; 
-  private: double beam_skip_threshold; 
-  //threshold for the ratio of invalid beams - at which all beams are integrated to the likelihoods 
-  //this would be an error condition 
-  private: double beam_skip_error_threshold;
+        // Max beams to consider
+    private:
+        int max_beams;
 
-  //temp data that is kept before observations are integrated to each particle (requried for beam skipping)
-  private: int max_samples;
-  private: int max_obs;
-  private: double **temp_obs;
+        // Beam skipping parameters (used by LikelihoodFieldModelProb model)
+    private:
+        bool do_beamskip;
 
-  // Laser model params
-  //
-  // Mixture params for the components of the model; must sum to 1
-  private: double z_hit;
-  private: double z_short;
-  private: double z_max;
-  private: double z_rand;
-  //
-  // Stddev of Gaussian model for laser hits.
-  private: double sigma_hit;
-  // Decay rate of exponential model for short readings.
-  private: double lambda_short;
-  // Threshold for outlier rejection (unused)
-  private: double chi_outlier;
-};
+    private:
+        double beam_skip_distance;
 
+    private:
+        double beam_skip_threshold;
+        // threshold for the ratio of invalid beams - at which all beams are integrated to the likelihoods
+        // this would be an error condition
+    private:
+        double beam_skip_error_threshold;
+
+        // temp data that is kept before observations are integrated to each particle (requried for beam skipping)
+    private:
+        int max_samples;
+
+    private:
+        int max_obs;
+
+    private:
+        double **temp_obs;
+
+        // Laser model params
+        //
+        // Mixture params for the components of the model; must sum to 1
+    private:
+        double z_hit;
+
+    private:
+        double z_short;
+
+    private:
+        double z_max;
+
+    private:
+        double z_rand;
+        //
+        // Stddev of Gaussian model for laser hits.
+    private:
+        double sigma_hit;
+        // Decay rate of exponential model for short readings.
+    private:
+        double lambda_short;
+        // Threshold for outlier rejection (unused)
+    private:
+        double chi_outlier;
+    };
 
 }
 

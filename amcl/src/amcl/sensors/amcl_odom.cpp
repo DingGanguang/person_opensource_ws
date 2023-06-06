@@ -59,7 +59,7 @@ angle_diff(double a, double b)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Default constructor
-AMCLOdom::AMCLOdom() : AMCLSensor()
+AMCLOdom::AMCLOdom() : AMCLSensor()     // 此处意思为：定义子类AMCLOdom的构造函数，在子类构造函数初始化列表中，显式的调用父类的构造函数
 {
   this->time = 0.0;
 }
@@ -113,17 +113,17 @@ AMCLOdom::SetModel( odom_model_t type,
 bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
 {
   AMCLOdomData *ndata;
-  ndata = (AMCLOdomData*) data;
+  ndata = (AMCLOdomData*) data;     // data是AMCLSensorData数据，将其转换为AMCLOdomData类型
 
   // Compute the new sample poses
   pf_sample_set_t *set;
 
   set = pf->sets + pf->current_set;
-  pf_vector_t old_pose = pf_vector_sub(ndata->pose, ndata->delta);
-
+  pf_vector_t old_pose = pf_vector_sub(ndata->pose, ndata->delta);      // 执行ndata->pose  sub ndata->delta  两个位置矢量相减
+                                                            // AMCLOdomData中的pose表示变化之后的位姿，delta表示位姿的变化量； old_pose = pose - delta
   switch( this->model_type )
   {
-  case ODOM_MODEL_OMNI:
+  case ODOM_MODEL_OMNI:     /////////////////////////////////////////////// 全向里程计运动模型
   {
     double delta_trans, delta_rot, delta_bearing;
     double delta_trans_hat, delta_rot_hat, delta_strafe_hat;
@@ -162,7 +162,7 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
     }
   }
   break;
-  case ODOM_MODEL_DIFF:
+  case ODOM_MODEL_DIFF:     ///////////////////////////////////////////// 差速里程计运动模型
   {
     // Implement sample_motion_odometry (Prob Rob p 136)
     double delta_rot1, delta_trans, delta_rot2;
@@ -175,17 +175,15 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
             ndata->delta.v[0]*ndata->delta.v[0]) < 0.01)
       delta_rot1 = 0.0;
     else
-      delta_rot1 = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]),
-                              old_pose.v[2]);
-    delta_trans = sqrt(ndata->delta.v[0]*ndata->delta.v[0] +
-                       ndata->delta.v[1]*ndata->delta.v[1]);
-    delta_rot2 = angle_diff(ndata->delta.v[2], delta_rot1);
+      delta_rot1 = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]), old_pose.v[2]);      // 使用atan2计算delta这段位移的夹角，然后减去old_pose[3]也就是theta，就可以得到 rot1
+    delta_trans = sqrt(ndata->delta.v[0]*ndata->delta.v[0] + ndata->delta.v[1]*ndata->delta.v[1]);
+    delta_rot2 = angle_diff(ndata->delta.v[2], delta_rot1);     // delta.v[3]是两个位姿之间的夹角，pose.theta - old_pose.theta，由于rot1已经求得，所以rot2 = 两者差值；
 
     // We want to treat backward and forward motion symmetrically for the
     // noise model to be applied below.  The standard model seems to assume
     // forward motion.
-    delta_rot1_noise = std::min(fabs(angle_diff(delta_rot1,0.0)),
-                                fabs(angle_diff(delta_rot1,M_PI)));
+    delta_rot1_noise = std::min(fabs(angle_diff(delta_rot1,0.0)),       // 此处的两个noise设置，什么意思？？？
+                                fabs(angle_diff(delta_rot1,M_PI)));         // 计算delta_rot1与0，pi之间的夹角，选择较小的那个作为rot1噪声
     delta_rot2_noise = std::min(fabs(angle_diff(delta_rot2,0.0)),
                                 fabs(angle_diff(delta_rot2,M_PI)));
 

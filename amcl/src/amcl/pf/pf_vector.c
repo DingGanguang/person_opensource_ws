@@ -219,7 +219,7 @@ pf_matrix_t pf_matrix_inverse(pf_matrix_t a, double *det)
 
 // Decompose a covariance matrix [a] into a rotation matrix [r] and a diagonal
 // matrix [d] such that a = r d r^T.
-void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)
+void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)       // d是对角矩阵 r是正交矩阵
 {
   int i, j;
   /*
@@ -234,8 +234,8 @@ void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)
   */
 
   double aa[3][3];
-  double eval[3];
-  double evec[3][3];
+  double eval[3];       // eval 表示特征值
+  double evec[3][3];    // evec 表示特征向量
 
   for (i = 0; i < 3; i++)
   {
