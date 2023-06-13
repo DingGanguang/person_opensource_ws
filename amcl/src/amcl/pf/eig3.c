@@ -261,7 +261,7 @@ static void tql2(double V[n][n], double d[n], double e[n]) {
   }
 }
 
-void eigen_decomposition(double A[n][n], double V[n][n], double d[n]) {
+void eigen_decomposition(double A[n][n], double V[n][n], double d[n]) {     // 改文件在windows也是可以运行的
   int i,j;
   double e[n];
   for (i = 0; i < n; i++) {

@@ -134,7 +134,7 @@ void map_draw_wifi(map_t *map, struct _rtk_fig_t *fig, int index);
 #define MAP_WYGY(map, j) (map->origin_y + ((j) - map->size_y / 2) * map->scale)
 
 // Convert from world coords to map coords
-#define MAP_GXWX(map, x) (floor((x - map->origin_x) / map->scale + 0.5) + map->size_x / 2)
+#define MAP_GXWX(map, x) (floor((x - map->origin_x) / map->scale + 0.5) + map->size_x / 2)		// 此处对于+0.5 有点不解，感觉没有必要
 #define MAP_GYWY(map, y) (floor((y - map->origin_y) / map->scale + 0.5) + map->size_y / 2)
 
 // Test to see if the given map coords lie within the absolute map bounds.

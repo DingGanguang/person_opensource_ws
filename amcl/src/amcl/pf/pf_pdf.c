@@ -45,7 +45,7 @@ static unsigned int pf_pdf_seed;
 
 // Create a gaussian pdf
 pf_pdf_gaussian_t *pf_pdf_gaussian_alloc(pf_vector_t x, pf_matrix_t cx)
-{
+{       // cx是一个对称矩阵，
   pf_matrix_t cd;
   pf_pdf_gaussian_t *pdf;
 
@@ -57,8 +57,8 @@ pf_pdf_gaussian_t *pf_pdf_gaussian_alloc(pf_vector_t x, pf_matrix_t cx)
 
   // Decompose the convariance matrix into a rotation
   // matrix and a diagonal matrix.
-  pf_matrix_unitary(&pdf->cr, &cd, pdf->cx);
-  pdf->cd.v[0] = sqrt(cd.m[0][0]);
+  pf_matrix_unitary(&pdf->cr, &cd, pdf->cx);        // 将pdf->cx进行正交分解，cr是正交矩阵，cd是对角矩阵
+  pdf->cd.v[0] = sqrt(cd.m[0][0]);      // 由于pdf->cd是向量，是将cd对角矩阵的对角线上的特征值开方。所以只有是正定矩阵，才可以正常开方
   pdf->cd.v[1] = sqrt(cd.m[1][1]);
   pdf->cd.v[2] = sqrt(cd.m[2][2]);
 
@@ -103,24 +103,24 @@ double pf_pdf_gaussian_value(pf_pdf_gaussian_t *pdf, pf_vector_t x)
 
 
 // Generate a sample from the pdf.
-pf_vector_t pf_pdf_gaussian_sample(pf_pdf_gaussian_t *pdf)
+pf_vector_t pf_pdf_gaussian_sample(pf_pdf_gaussian_t *pdf)      // 疑问，为什么要生成一个服从高斯分布的样本，采用如下这么麻烦的代码？
 {
   int i, j;
-  pf_vector_t r;
+  pf_vector_t r;        // r向量：保存pdf->cd(特征值开方)组成的向量
   pf_vector_t x;
 
   // Generate a random vector
   for (i = 0; i < 3; i++)
   {
     //r.v[i] = gsl_ran_gaussian(pdf->rng, pdf->cd.v[i]);
-    r.v[i] = pf_ran_gaussian(pdf->cd.v[i]);
+    r.v[i] = pf_ran_gaussian(pdf->cd.v[i]);     // pf->cd.v[i] 表示的是特征值开方后的值
   }
 
   for (i = 0; i < 3; i++)
   {
-    x.v[i] = pdf->x.v[i];
+    x.v[i] = pdf->x.v[i];   // pdf的均值向量x保存在当前空间中的x中
     for (j = 0; j < 3; j++)
-      x.v[i] += pdf->cr.m[i][j] * r.v[j];
+      x.v[i] += pdf->cr.m[i][j] * r.v[j];       //
   } 
   
   return x;
@@ -130,18 +130,18 @@ pf_vector_t pf_pdf_gaussian_sample(pf_pdf_gaussian_t *pdf)
 // deviation sigma.
 // We use the polar form of the Box-Muller transformation, explained here:
 //   http://www.taygeta.com/random/gaussian.html
-double pf_ran_gaussian(double sigma)
+double pf_ran_gaussian(double sigma)        // sigma是要服从的高斯分布的标准差；
 {
   double x1, x2, w, r;
 
   do
   {
     do { r = drand48(); } while (r==0.0);
-    x1 = 2.0 * r - 1.0;
+    x1 = 2.0 * r - 1.0;     
     do { r = drand48(); } while (r==0.0);
-    x2 = 2.0 * r - 1.0;
-    w = x1*x1 + x2*x2;
+    x2 = 2.0 * r - 1.0;             // x1,x2是一个介于[-1,1]之间的随机数；
+    w = x1*x1 + x2*x2;              // w是一个(0,0)为原因，半径=1的圆中的任意一个随机数；
   } while(w > 1.0 || w==0.0);
 
-  return(sigma * x2 * sqrt(-2.0*log(w)/w));
+  return(sigma * x2 * sqrt(-2.0*log(w)/w));     
 }

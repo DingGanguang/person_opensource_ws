@@ -17,7 +17,7 @@ static double drand48(void)
 
 static void srand48(long int seedval)
 {
-    srand(seedval);
+    srand(seedval);     // 参数是随机种子
 }
 #endif
 

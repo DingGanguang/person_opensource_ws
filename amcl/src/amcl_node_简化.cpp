@@ -518,254 +518,10 @@ AmclNode::AmclNode() : // ##step01 构造函数
 
 #pragma region
 void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
-{
-    boost::recursive_mutex::scoped_lock cfl(configuration_mutex_);
-
-    // we don't want to do anything on the first call
-    // which corresponds to startup
-    if (first_reconfigure_call_)
-    {
-        first_reconfigure_call_ = false;
-        default_config_ = config;
-        return;
-    }
-
-    if (config.restore_defaults)
-    {
-        config = default_config_;
-        // avoid looping
-        config.restore_defaults = false;
-    }
-
-    d_thresh_ = config.update_min_d;
-    a_thresh_ = config.update_min_a;
-
-    resample_interval_ = config.resample_interval;
-
-    laser_min_range_ = config.laser_min_range;
-    laser_max_range_ = config.laser_max_range;
-
-    gui_publish_period = ros::Duration(1.0 / config.gui_publish_rate);
-    save_pose_period = ros::Duration(1.0 / config.save_pose_rate);
-
-    transform_tolerance_.fromSec(config.transform_tolerance);
-
-    max_beams_ = config.laser_max_beams;
-    alpha1_ = config.odom_alpha1;
-    alpha2_ = config.odom_alpha2;
-    alpha3_ = config.odom_alpha3;
-    alpha4_ = config.odom_alpha4;
-    alpha5_ = config.odom_alpha5;
-
-    z_hit_ = config.laser_z_hit;
-    z_short_ = config.laser_z_short;
-    z_max_ = config.laser_z_max;
-    z_rand_ = config.laser_z_rand;
-    sigma_hit_ = config.laser_sigma_hit;
-    lambda_short_ = config.laser_lambda_short;
-    laser_likelihood_max_dist_ = config.laser_likelihood_max_dist;
-
-    if (config.laser_model_type == "beam")
-        laser_model_type_ = LASER_MODEL_BEAM;
-    else if (config.laser_model_type == "likelihood_field")
-        laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD;
-    else if (config.laser_model_type == "likelihood_field_prob")
-        laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_PROB;
-
-    if (config.odom_model_type == "diff")
-        odom_model_type_ = ODOM_MODEL_DIFF;
-    else if (config.odom_model_type == "omni")
-        odom_model_type_ = ODOM_MODEL_OMNI;
-    else if (config.odom_model_type == "diff-corrected")
-        odom_model_type_ = ODOM_MODEL_DIFF_CORRECTED;
-    else if (config.odom_model_type == "omni-corrected")
-        odom_model_type_ = ODOM_MODEL_OMNI_CORRECTED;
-
-    if (config.min_particles > config.max_particles)
-    {
-        ROS_WARN("You've set min_particles to be greater than max particles, this isn't allowed so they'll be set to be equal.");
-        config.max_particles = config.min_particles;
-    }
-
-    min_particles_ = config.min_particles;
-    max_particles_ = config.max_particles;
-    alpha_slow_ = config.recovery_alpha_slow;
-    alpha_fast_ = config.recovery_alpha_fast;
-    tf_broadcast_ = config.tf_broadcast;
-    force_update_after_initialpose_ = config.force_update_after_initialpose;
-    force_update_after_set_map_ = config.force_update_after_set_map;
-
-    do_beamskip_ = config.do_beamskip;
-    beam_skip_distance_ = config.beam_skip_distance;
-    beam_skip_threshold_ = config.beam_skip_threshold;
-
-    // Clear queued laser objects so that their parameters get updated
-    lasers_.clear();
-    lasers_update_.clear();
-    frame_to_laser_.clear();
-
-    if (pf_ != NULL)
-    {
-        pf_free(pf_);
-        pf_ = NULL;
-    }
-    pf_ = pf_alloc(min_particles_, max_particles_,
-                   alpha_slow_, alpha_fast_,
-                   (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
-                   (void *)map_);
-    pf_set_selective_resampling(pf_, selective_resampling_);
-    pf_err_ = config.kld_err;
-    pf_z_ = config.kld_z;
-    pf_->pop_err = pf_err_;
-    pf_->pop_z = pf_z_;
-
-    // Initialize the filter
-    pf_vector_t pf_init_pose_mean = pf_vector_zero();
-    pf_init_pose_mean.v[0] = last_published_pose.pose.pose.position.x;
-    pf_init_pose_mean.v[1] = last_published_pose.pose.pose.position.y;
-    pf_init_pose_mean.v[2] = tf2::getYaw(last_published_pose.pose.pose.orientation);
-    pf_matrix_t pf_init_pose_cov = pf_matrix_zero();
-    pf_init_pose_cov.m[0][0] = last_published_pose.pose.covariance[6 * 0 + 0];
-    pf_init_pose_cov.m[1][1] = last_published_pose.pose.covariance[6 * 1 + 1];
-    pf_init_pose_cov.m[2][2] = last_published_pose.pose.covariance[6 * 5 + 5];
-    pf_init(pf_, pf_init_pose_mean, pf_init_pose_cov);
-    pf_init_ = false;
-
-    // Instantiate the sensor objects
-    // Odometry
-    delete odom_;
-    odom_ = new AMCLOdom();
-    ROS_ASSERT(odom_);
-    odom_->SetModel(odom_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_);
-    // Laser
-    delete laser_;
-    laser_ = new AMCLLaser(max_beams_, map_);
-    ROS_ASSERT(laser_);
-    if (laser_model_type_ == LASER_MODEL_BEAM)
-        laser_->SetModelBeam(z_hit_, z_short_, z_max_, z_rand_,sigma_hit_, lambda_short_, 0.0);		// 【光束模型】调用
-    else if (laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD_PROB)
-    {
-        ROS_INFO("Initializing likelihood field model; this can take some time on large maps...");
-        laser_->SetModelLikelihoodFieldProb(z_hit_, z_rand_, sigma_hit_,
-                                            laser_likelihood_max_dist_,
-                                            do_beamskip_, beam_skip_distance_,
-                                            beam_skip_threshold_, beam_skip_error_threshold_);		// 似然域概率模型   调用
-        ROS_INFO("Done initializing likelihood field model with probabilities.");
-    }
-    else if (laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD)										
-    {
-        ROS_INFO("Initializing likelihood field model; this can take some time on large maps...");
-        laser_->SetModelLikelihoodField(z_hit_, z_rand_, sigma_hit_, laser_likelihood_max_dist_);		// 【似然域模型】调用
-        ROS_INFO("Done initializing likelihood field model.");
-    }
-
-    odom_frame_id_ = stripSlash(config.odom_frame_id);
-    base_frame_id_ = stripSlash(config.base_frame_id);
-    global_frame_id_ = stripSlash(config.global_frame_id);
-
-    delete laser_scan_filter_;
-    laser_scan_filter_ =
-        new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(*laser_scan_sub_,
-                                                           *tf_,
-                                                           odom_frame_id_,
-                                                           100,
-                                                           nh_);
-    laser_scan_filter_->registerCallback(boost::bind(&AmclNode::laserReceived,
-                                                     this, _1));
-
-    initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
-}
+{}
 
 void AmclNode::runFromBag(const std::string &in_bag_fn, bool trigger_global_localization)
-{
-    rosbag::Bag bag;
-    bag.open(in_bag_fn, rosbag::bagmode::Read);
-    std::vector<std::string> topics;
-    topics.push_back(std::string("tf"));
-    std::string scan_topic_name = "base_scan"; // TODO determine what topic this actually is from ROS
-    topics.push_back(scan_topic_name);
-    rosbag::View view(bag, rosbag::TopicQuery(topics));
-
-    ros::Publisher laser_pub = nh_.advertise<sensor_msgs::LaserScan>(scan_topic_name, 100);
-    ros::Publisher tf_pub = nh_.advertise<tf2_msgs::TFMessage>("/tf", 100);
-
-    // Sleep for a second to let all subscribers connect
-    ros::WallDuration(1.0).sleep();
-
-    ros::WallTime start(ros::WallTime::now());
-
-    // Wait for map
-    while (ros::ok())
-    {
-        {
-            boost::recursive_mutex::scoped_lock cfl(configuration_mutex_);
-            if (map_)
-            {
-                ROS_INFO("Map is ready");
-                break;
-            }
-        }
-        ROS_INFO("Waiting for the map...");
-        ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration(1.0));
-    }
-
-    if (trigger_global_localization)
-    {
-        std_srvs::Empty empty_srv;
-        globalLocalizationCallback(empty_srv.request, empty_srv.response);
-    }
-
-    BOOST_FOREACH (rosbag::MessageInstance const msg, view)
-    {
-        if (!ros::ok())
-        {
-            break;
-        }
-
-        // Process any ros messages or callbacks at this point
-        ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration());
-
-        tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
-        if (tf_msg != NULL)
-        {
-            tf_pub.publish(msg);
-            for (size_t ii = 0; ii < tf_msg->transforms.size(); ++ii)
-            {
-                tf_->setTransform(tf_msg->transforms[ii], "rosbag_authority");
-            }
-            continue;
-        }
-
-        sensor_msgs::LaserScan::ConstPtr base_scan = msg.instantiate<sensor_msgs::LaserScan>();
-        if (base_scan != NULL)
-        {
-            laser_pub.publish(msg);
-            laser_scan_filter_->add(base_scan);
-            if (bag_scan_period_ > ros::WallDuration(0))
-            {
-                bag_scan_period_.sleep();
-            }
-            continue;
-        }
-
-        ROS_WARN_STREAM("Unsupported message type" << msg.getTopic());
-    }
-
-    bag.close();
-
-    double runtime = (ros::WallTime::now() - start).toSec();
-    ROS_INFO("Bag complete, took %.1f seconds to process, shutting down", runtime);
-
-    const geometry_msgs::Quaternion &q(last_published_pose.pose.pose.orientation);
-    double yaw, pitch, roll;
-    tf2::Matrix3x3(tf2::Quaternion(q.x, q.y, q.z, q.w)).getEulerYPR(yaw, pitch, roll);
-    ROS_INFO("Final location %.3f, %.3f, %.3f with stamp=%f",
-             last_published_pose.pose.pose.position.x,
-             last_published_pose.pose.pose.position.y,
-             yaw, last_published_pose.header.stamp.toSec());
-
-    ros::shutdown();
-}
+{}
 
 void AmclNode::savePoseToServer()   // 仅仅在2个地方调用  1.laserReceived  2.中断函数中
 {       // AMCLCMT: 把当前的base->map的位姿保存到参数服务器中的   initial_pose_x,y,a    initial_cov_xx,initial_cov_yy,initial_cov_aa中
@@ -838,13 +594,6 @@ void AmclNode::updatePoseFromServer()
 
 void AmclNode::checkLaserReceived(const ros::TimerEvent &event)
 {
-    ros::Duration d = ros::Time::now() - last_laser_received_ts_;
-    if (d > laser_check_interval_)
-    {
-        ROS_WARN("No laser scan received (and thus no pose updates have been published) for %f seconds.  Verify that data is being published on the %s topic.",
-                 d.toSec(),
-                 ros::names::resolve(scan_topic_).c_str());
-    }
 }
 
 void AmclNode::requestMap()
@@ -1002,11 +751,10 @@ AmclNode::convertMap(const nav_msgs::OccupancyGrid &map_msg)
     map_t *map = map_alloc();
     ROS_ASSERT(map);
 
-    map->size_x = map_msg.info.width;		// mapserver发布的width 是int类型，size_x也是int类型
+    map->size_x = map_msg.info.width;
     map->size_y = map_msg.info.height;
     map->scale = map_msg.info.resolution;
-    map->origin_x = map_msg.info.origin.position.x + (map->size_x / 2) * map->scale;    
-	// 标准map_msg是地图的左下角在map中的坐标为origin，此处转换为地图的中心在世界坐标系中的坐标
+    map->origin_x = map_msg.info.origin.position.x + (map->size_x / 2) * map->scale;    // 标准map_msg是地图的左下角在map中的坐标为origin，此处转换为地图的中心在世界坐标系中的坐标
     map->origin_y = map_msg.info.origin.position.y + (map->size_y / 2) * map->scale;
     // Convert to player format
     map->cells = (map_cell_t *)malloc(sizeof(map_cell_t) * map->size_x * map->size_y);
@@ -1493,19 +1241,20 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
             tf2::convert(odom_to_map.pose, latest_tf_);     // latest_tf_ 保存的是map->odom的变换；
             latest_tf_valid_ = true;
 
-            if (tf_broadcast_ == true)
+            if (tf_broadcast_ == true)			// 如果要发布tf的话
             {
                 // We want to send a transform that is good up until a
                 // tolerance time so that odom can be used
                 ros::Time transform_expiration = (laser_scan->header.stamp +
                                                   transform_tolerance_);
                 geometry_msgs::TransformStamped tmp_tf_stamped;
-                tmp_tf_stamped.header.frame_id = global_frame_id_;
+                tmp_tf_stamped.header.frame_id = global_frame_id_;		// map
                 tmp_tf_stamped.header.stamp = transform_expiration;
                 tmp_tf_stamped.child_frame_id = odom_frame_id_;
+				// tmp_tf_stamped 表示 parent:map  child:odom    即 odom->map 的坐标变换
                 tf2::convert(latest_tf_.inverse(), tmp_tf_stamped.transform);
 
-                this->tfb_->sendTransform(tmp_tf_stamped);
+                this->tfb_->sendTransform(tmp_tf_stamped);		// 把odom->map 的tf发布出来
                 sent_first_transform_ = true;
             }
         }

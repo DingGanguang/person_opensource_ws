@@ -69,17 +69,17 @@ pf_kdtree_t *pf_kdtree_alloc(int max_size)
 
   self = calloc(1, sizeof(pf_kdtree_t));
 
-  self->size[0] = 0.50;
-  self->size[1] = 0.50;
-  self->size[2] = (10 * M_PI / 180);
+  self->size[0] = 0.50;			// 0.5
+  self->size[1] = 0.50;			// 0.5
+  self->size[2] = (10 * M_PI / 180);		// 表示10度		// size数组，分别表示pose(x,y,theta)的归一化尺度值。这个理解在这里看不出来，是从插入节点的代码中倒推理解的;
 
   self->root = NULL;
 
-  self->node_count = 0;
+  self->node_count = 0;		// 遍历是，代表当前node？
   self->node_max_count = max_size;
   self->nodes = calloc(self->node_max_count, sizeof(pf_kdtree_node_t));
 
-  self->leaf_count = 0;
+  self->leaf_count = 0;		// node_count和leaf_count在插入节点时都进行了更新。
 
   return self;
 }
@@ -109,15 +109,17 @@ void pf_kdtree_clear(pf_kdtree_t *self)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Insert a pose into the tree.
-void pf_kdtree_insert(pf_kdtree_t *self, pf_vector_t pose, double value)
+void pf_kdtree_insert(pf_kdtree_t *self, pf_vector_t pose, double value)			// 参数2:位姿    参数3:权重
 {
   int key[3];
-
-  key[0] = floor(pose.v[0] / self->size[0]);
+// key是整型，把传入的位姿pose[3] 分别除以tree->size[3]，即每个位姿都x2，然后向下取整，得到一个整数；  ？？？整数是为了方便判断相等吗？
+  key[0] = floor(pose.v[0] / self->size[0]);			// WHOLELINE 把pose[i] 除以0.5什么意思？??????????????????????????
   key[1] = floor(pose.v[1] / self->size[1]);
   key[2] = floor(pose.v[2] / self->size[2]);
 
-  self->root = pf_kdtree_insert_node(self, NULL, self->root, key, value);
+  self->root = pf_kdtree_insert_node(self, NULL, self->root, key, value);	// key是对pose经过未知操作后产生的key[3]
+	// 插入tree指针，tree->root节点指针，  参数2是父节点指针，调用一直都是NULL；
+	// 参数3为处理后的位姿和权重
 
   // Test code
   /*
@@ -211,7 +213,8 @@ int pf_kdtree_equal(pf_kdtree_t *self, int key_a[], int key_b[])
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Insert a node into the tree
+// Insert a node into the tree  递归的把node插入到整颗tree中
+// 实际调用语句：  self->root = pf_kdtree_insert_node(self, NULL, self->root,             key, value);	// key是对pose经过未知操作后产生的key[3]
 pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *parent,
                                         pf_kdtree_node_t *node, int key[], double value)
 {
@@ -219,18 +222,18 @@ pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *par
   int split, max_split;
 
   // If the node doesnt exist yet...
-  if (node == NULL)
+  if (node == NULL)		// 参数node = root ，如果树的root=NULL，则先设置root 节点
   {
-    assert(self->node_count < self->node_max_count);
-    node = self->nodes + self->node_count++;
+    assert(self->node_count < self->node_max_count);		// self->node_count是一个用于遍历tree中所有node的变量，可能表示当前所在的那个节点？
+    node = self->nodes + self->node_count++;				// nodes[0] 从0开始遍历
     memset(node, 0, sizeof(pf_kdtree_node_t));
 
-    node->leaf = 1;
+    node->leaf = 1;			
 
     if (parent == NULL)
-      node->depth = 0;
+      node->depth = 0;		// 表示当前的深度，在第一层
     else
-      node->depth = parent->depth + 1;
+      node->depth = parent->depth + 1;		// 如果有父节点，则当前深度，是在父节点的深度上+1 
 
     for (i = 0; i < 3; i++)
       node->key[i] = key[i];
@@ -245,7 +248,7 @@ pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *par
     // If the keys are equal, increment the value
     if (pf_kdtree_equal(self, key, node->key))
     {
-      node->value += value;
+      node->value += value;		// 如果传入的位姿转换后的key 同root（根节点）的key相同，则不插入节点，仅仅是
     }
 
     // The keys are not equal, so split this node
@@ -258,7 +261,7 @@ pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *par
       for (i = 0; i < 3; i++)
       {
         split = abs(key[i] - node->key[i]);
-        if (split > max_split)
+        if (split > max_split)		// 比较输入的pose的key与root->key 找出差距最大的维度 ,root->pivot_dim = i; 并吧插值赋值给max_split
         {
           max_split = split;
           node->pivot_dim = i;
@@ -284,7 +287,7 @@ pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *par
     }
   }
 
-  // If the node exists, and it has children...
+  // If the node exists, and it has children...        node->leaf == 0 ?
   else
   {
     assert(node->children[0] != NULL);
@@ -299,6 +302,21 @@ pf_kdtree_node_t *pf_kdtree_insert_node(pf_kdtree_t *self, pf_kdtree_node_t *par
   return node;
 }
 
+/************************************************************************************************************************************
+插入数据的基本流程：
+1）新数据(pose, weight)加进来，计算key值;
+2）如果是第一个数据，此时根节点为空，所以生成第一个节点，并初始化，设置leaf=1，为叶子节点，也是root节点，相应的count增加;第一个数据插入完成
+3）第二个数据进来，重复1
+4）此时根节点存在，且为叶子节点，判断第二个数据的key值是否等于根节点的key值，若等于，则更新根节点的value值，即同一个key值，权重累加。若不等于，则要根据key差值最大的维度划分左右子节点。
+　　4.1）计算key[i]的差值，确定是在(x,y,theta)中的一个维度继续进行划分，注意，这个划分就相当于直方图中划分不同组距。
+　　4.2）如当前key的某个维度的值大于根节点的key的值，则为右节点，根变成左节点;反之。（二叉排序树）
+　　4.3）左右子节点执行递归调用，对新生成的两个子节点初始化（执行2）
+　　4.4）将根节点的叶子节点的标识设置为0，因为此时已经不再是叶子节点了。第二个数据插入完成，此时树的状态是两个左右子节点，同时，第一个插入的节点根节点又是子节点，第二个节点是叶子节点。
+5）第三个数据进来，重复1
+6）此时根节点存在，且存在子节点，判断根节点的划分维度的key值与当前插入数据的key值比较，然后递归调用。第三个数据插入按照前面的流程进行，此时第一个或第二个节点成为root，与第三个节点比较插入。
+7）所有数插入完成。
+流程写的有些绕。没办法，我自己在纸上举特例走了一遍，才搞清楚里面插入的细节。看不懂的话，就自己举个一维的例子，模拟一下就清晰了。后期有时间再画动图详解。
+*************************************************************************************************************************************/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Recursive node search

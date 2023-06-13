@@ -116,7 +116,7 @@ void enqueue(map_t *map, int i, int j,
 }
 
 // Update the cspace distance values
-void map_update_cspace(map_t *map, double max_occ_dist)
+void map_update_cspace(map_t *map, double max_occ_dist)			// arg1: 地图指针， arg2: 
 {
 	unsigned char *marked;
 	std::priority_queue<CellData> Q;

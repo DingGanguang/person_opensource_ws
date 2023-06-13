@@ -45,13 +45,13 @@ extern "C" {
 typedef struct
 {
   // Mean, covariance and inverse covariance
-  pf_vector_t x;
-  pf_matrix_t cx;
+  pf_vector_t x;        // x 是一个3维向量： 实际用于位姿均值
+  pf_matrix_t cx;       // cx 是一个矩阵    ：实际用于位姿协方差
   //pf_matrix_t cxi;
   double cxdet;
 
   // Decomposed covariance matrix (rotation * diagonal)
-  pf_matrix_t cr;
+  pf_matrix_t cr;       // 协方差矩阵的分解，正交分解，cr是正交阵，cd是对角阵
   pf_vector_t cd;
 
   // A random number generator

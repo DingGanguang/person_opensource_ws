@@ -212,7 +212,7 @@ double AMCLLaser::BeamModel(AMCLLaserData *data, pf_sample_set_t* set)
   return(total_weight);
 }
 
-double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set)
+double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set)		// arg1: 激光数据 arg2: 粒子集
 {
   AMCLLaser *self;
   int i, j, step;
@@ -229,10 +229,10 @@ double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set
   total_weight = 0.0;
 
   // Compute the sample weights
-  for (j = 0; j < set->sample_count; j++)
+  for (j = 0; j < set->sample_count; j++)		// 遍历所有粒子
   {
     sample = set->samples + j;
-    pose = sample->pose;
+    pose = sample->pose;		// 每个粒子的位姿
 
     // Take account of the laser pose relative to the robot
     pose = pf_vector_coord_add(self->laser_pose, pose);

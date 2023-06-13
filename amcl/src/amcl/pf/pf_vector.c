@@ -101,9 +101,11 @@ pf_vector_t pf_vector_sub(pf_vector_t a, pf_vector_t b)
   return c;
 }
 
-
+// 功能,相当于 c = R*a+b ，即将a向量，进行线性变换;即将在child坐标系下的一个向量a, 变换到parent坐标系中；
+// b是child frame 在parent frame中的坐标；b[0],b[1] 是偏移向量；
+// b[3]是child相对于parent的旋转角度，通过这个角度，可以获得旋转矩阵R
 // Transform from local to global coords (a + b)
-pf_vector_t pf_vector_coord_add(pf_vector_t a, pf_vector_t b)
+pf_vector_t pf_vector_coord_add(pf_vector_t a, pf_vector_t b)			
 {
   pf_vector_t c;
 
@@ -220,7 +222,7 @@ pf_matrix_t pf_matrix_inverse(pf_matrix_t a, double *det)
 // Decompose a covariance matrix [a] into a rotation matrix [r] and a diagonal
 // matrix [d] such that a = r d r^T.
 void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)       // d是对角矩阵 r是正交矩阵
-{
+{           // 如果a是对称矩阵，则a可以特征值分解（正交矩阵*对角矩阵的形式）
   int i, j;
   /*
   gsl_matrix *aa;
@@ -234,8 +236,8 @@ void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)       // d
   */
 
   double aa[3][3];
-  double eval[3];       // eval 表示特征值
-  double evec[3][3];    // evec 表示特征向量
+  double eval[3];       // eval 表示特征值；    3个特征值组成的向量
+  double evec[3][3];    // evec 表示特征向量；3个特征向量，所以是3x3
 
   for (i = 0; i < 3; i++)
   {
@@ -253,13 +255,13 @@ void pf_matrix_unitary(pf_matrix_t *r, pf_matrix_t *d, pf_matrix_t a)       // d
   gsl_eigen_symmv_free(w);
   */
 
-  eigen_decomposition(aa,evec,eval);
+  eigen_decomposition(aa,evec,eval);        // 对aa矩阵，进行分解，得到特征向量evec，和特征值 eval
 
   *d = pf_matrix_zero();
   for (i = 0; i < 3; i++)
   {
     //d->m[i][i] = gsl_vector_get(eval, i);
-    d->m[i][i] = eval[i];
+    d->m[i][i] = eval[i];       
     for (j = 0; j < 3; j++)
     {
       //r->m[i][j] = gsl_matrix_get(evec, i, j);

@@ -44,17 +44,17 @@ extern "C"
     // Function prototype for the initialization model; generates a sample pose from
     // an appropriate distribution.
     typedef pf_vector_t (*pf_init_model_fn_t)(void *init_data);
-
+                // AMCLCMT 模型初始化函数 的指针
     // Function prototype for the action model; generates a sample pose from
     // an appropriate distribution
     typedef void (*pf_action_model_fn_t)(void *action_data,
                                          struct _pf_sample_set_t *set);
-
+                // AMCLCMT 运动模型 函数指针
     // Function prototype for the sensor model; determines the probability
     // for the given set of sample poses.          
     typedef double (*pf_sensor_model_fn_t)(void *sensor_data,
                                            struct _pf_sample_set_t *set);
-     // pf_sensor_model_fn_t 是函数指针的重定义，关联的函数的功能：根据给定的例子样本的位姿，计算概率
+                // AMCLCMT 感知模型的函数指针   pf_sensor_model_fn_t 是函数指针的重定义，关联的函数的功能：根据给定的例子样本的位姿，计算概率
 
     // Information for a single sample
     typedef struct
@@ -65,7 +65,7 @@ extern "C"
         // Weight for this pose
         double weight;
 
-    } pf_sample_t; //AMCLCMT: 单个粒子, pose + weight
+    } pf_sample_t; //AMCLCMT: 单个粒子, pose + weight       // 内存占据32字节
 
     // Information for a cluster of samples
     typedef struct
@@ -83,7 +83,7 @@ extern "C"
         // Workspace
         double m[4], c[2][2];
 
-    } pf_cluster_t; // 粒子集群
+    } pf_cluster_t; // AMCLCMT 粒子集群     // 内存占据176字节
 
     // Information for a set of samples
     typedef struct _pf_sample_set_t
@@ -104,7 +104,7 @@ extern "C"
         pf_matrix_t cov;
         int converged;
         double n_effective;
-    } pf_sample_set_t; // a set of 粒子
+    } pf_sample_set_t; // a set of 粒子         // 内存占据144+8字节
 
     // Information for an entire filter
     typedef struct _pf_t
@@ -121,7 +121,7 @@ extern "C"
         // The sample sets.  We keep two sets and use [current_set]
         // to identify the active set.
         int current_set;
-        pf_sample_set_t sets[2];
+        pf_sample_set_t sets[2];        // 创建pt_t对象的时候，sets数组，就会直接分配内存了，只有指针，才需要malloc
 
         // Running averages, slow and fast, of likelihood
         double w_slow, w_fast;
