@@ -633,7 +633,7 @@ void AmclNode::mapReceived(const nav_msgs::OccupancyGridConstPtr &msg)
     并完成了滤波器的初始化工作。 
     在函数的一开始对配置信号量加锁，并输出一些关于地图尺寸和分辨率的日志。
  ****************************************************/
-// WHOLELINE:   地图处理 hadnldeMapMesage()
+// WHOLELINE:   地图处理 hadnldeMapMessage()
 void AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
 
 {
@@ -694,6 +694,7 @@ void AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid &msg)
     odom_ = new AMCLOdom();
     ROS_ASSERT(odom_);
     odom_->SetModel(odom_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_);
+
     // Laser    // AMCLCMT: 构建雷达传感器对象，并根据运行参数laser_model_type_构建不同模型的雷达。
     delete laser_;
     laser_ = new AMCLLaser(max_beams_, map_);
@@ -751,7 +752,7 @@ AmclNode::convertMap(const nav_msgs::OccupancyGrid &map_msg)
     map_t *map = map_alloc();
     ROS_ASSERT(map);
 
-    map->size_x = map_msg.info.width;
+    map->size_x = map_msg.info.width;		// mapserver发布的width 是int类型，size_x也是int类型
     map->size_y = map_msg.info.height;
     map->scale = map_msg.info.resolution;
     map->origin_x = map_msg.info.origin.position.x + (map->size_x / 2) * map->scale;    // 标准map_msg是地图的左下角在map中的坐标为origin，此处转换为地图的中心在世界坐标系中的坐标
@@ -893,24 +894,26 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
     }
     boost::recursive_mutex::scoped_lock lr(configuration_mutex_);
     int laser_index = -1;
-
+/**************************************************************************************************************
+ * step1 : 判断当前激光帧数据的雷达是否已经存在与 frame_to_laser_中，获取激光雷达在map中的序号，保存在laser_index中
+ **************************************************************************************************************/
     // Do we have the base->base_laser Tx yet?
     if (frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end())		  // frame_to_laser_ map中没有laser_link的坐标系 的分支
     {
         ROS_DEBUG("Setting up laser %d (frame_id=%s)\n", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
-        lasers_.push_back(new AMCLLaser(*laser_));
-        lasers_update_.push_back(true);
-        laser_index = frame_to_laser_.size();		// laser_index = 0
+        lasers_.push_back(new AMCLLaser(*laser_));			// AMCLCMT: 问题：此处frame_to_laser容器为空，将一个*laser对象，放入到lasers_容器中，为何，用途是什么？
+        lasers_update_.push_back(true);						// AMCLCMT: lasers_<AMCLLaser>  lasers_update_<bool>
+        laser_index = frame_to_laser_.size();				// 如果只有一个雷达的话，则laser_index = 0 
 
-        geometry_msgs::PoseStamped ident;			// ident 表示的是laser_link坐标系下的坐标原点；
+        geometry_msgs::PoseStamped ident;						
         ident.header.frame_id = laser_scan_frame_id;
         ident.header.stamp = ros::Time();
-        tf2::toMsg(tf2::Transform::getIdentity(), ident.pose);
+        tf2::toMsg(tf2::Transform::getIdentity(), ident.pose);		// ident 表示的是laser_link坐标系下的坐标原点；
 
-        geometry_msgs::PoseStamped laser_pose;
+        geometry_msgs::PoseStamped laser_pose;				// AMCLCMT： laser_pose 保存laser的原点在base坐标系下的位姿
         try
         {
-            this->tf_->transform(ident, laser_pose, base_frame_id_);		// laser_pose 保存laser_link的原点在base_link坐标系下的位姿
+            this->tf_->transform(ident, laser_pose, base_frame_id_);		
         }	
         catch (const tf2::TransformException &e)
         {
@@ -922,7 +925,7 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         }
 
         pf_vector_t laser_pose_v;
-        laser_pose_v.v[0] = laser_pose.pose.position.x;
+        laser_pose_v.v[0] = 89741.pose.position.x;
         laser_pose_v.v[1] = laser_pose.pose.position.y;
         // laser mounting angle gets computed later -> set to 0 here!
         laser_pose_v.v[2] = 0;
@@ -940,12 +943,16 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         laser_index = frame_to_laser_[laser_scan_frame_id];
     }
 
+/**************************************************************************************************************
+ * step2 : 获取当前base相对于odom的位姿 
+ **************************************************************************************************************/
     // Where was the robot when this scan was taken?
     pf_vector_t pose;       // AMCLCMT pose，保存的是 base在odom中的x,y,yaw
     if (!getOdomPose(latest_odom_pose_, pose.v[0], pose.v[1], pose.v[2],       
                      laser_scan->header.stamp, base_frame_id_))  
                      // getOdomPose() 将base在odom中的位姿，保存在 latest_odom_pose_ 中，所以"latest_odom_pose_"保存的就是base->odom的坐标变换；
-//AMCLCMT: latest_odom_pose_ 保存的是base_link坐标系的原点在odom坐标系中的坐标，也就是机器人在odom中的坐标                     
+		// AMCLCMT: latest_odom_pose_ 保存的是base_link坐标系的原点在odom坐标系中的坐标，也就是机器人在odom中的坐标
+		// AMCLCMT: pose 向量保存了base@odom中的x,y,yaw 三个平面位姿
 
     {
         ROS_ERROR("Couldn't determine robot's pose associated with laser scan");
@@ -954,6 +961,13 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
 
     pf_vector_t delta = pf_vector_zero();
 
+/**************************************************************************************************************
+ * step3 : 围绕pf_init_是否已经初始化完成，操作不同分支
+ * 	3.1 pf_init = true的时候，判断里程计变化量是否需要更新传感器数据 lasers_update_[i] 是否设置为 true
+ * 	3.2 pf_init = true 且lasers_update_[laser_index] = 1，里程计更新
+ **************************************************************************************************************/
+	// 该分支在(重新预处理之后)第二次收到激光雷达数据的时候，就会执行
+	// 记录base在odom坐标系中的位姿偏差，保存在delta中
     if (pf_init_)
     {
         // Compute change in pose
@@ -965,45 +979,48 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         // See if we should update the filter
         bool update = fabs(delta.v[0]) > d_thresh_ ||
                       fabs(delta.v[1]) > d_thresh_ ||
-                      fabs(delta.v[2]) > a_thresh_;
+                      fabs(delta.v[2]) > a_thresh_;		// 如果位姿偏差的delta（三个分量中，有1个超过了变化阈值，就标记需要更新update = true）
         update = update || m_force_update;
-        m_force_update = false;
-
-        // Set the laser update flags
-        if (update)
+        m_force_update = false;				// 此处说明：m_force_update 在其他位置的设置，仅仅一次生效，比如通过服务设置为"无移动时强制更新"=true
+											// 此处又重置为false
+        // Set the laser update flags		
+        if (update)	// AMCLCMT 如果delta已经达到更新的阈值了，则update设置为true， 如果update=true，则所有雷达数据should update 	lasers_[i]
             for (unsigned int i = 0; i < lasers_update_.size(); i++)
                 lasers_update_[i] = true;
     }
 
     bool force_publication = false;
-    if (!pf_init_)
+	// pf_init_ = false时，   
+	// 三种情况下，会设置pf_init_ = false （1） handlemapmessage()处理了地图消息之后；（2）调用全局定位服务之后；（3）初始位姿设置之后；
+	// 所以该分支只在上述三种情况后才执行；
+    if (!pf_init_)	
     {
         // Pose at last filter update
         pf_odom_pose_ = pose;
 
-        // Filter is now initialized
-        pf_init_ = true;
+        // Filter is now initialized  如果不进行上述的三种预处理，此后pf_init_就一直为true了
+        pf_init_ = true;		
 
         // Should update sensor data
         for (unsigned int i = 0; i < lasers_update_.size(); i++)
-            lasers_update_[i] = true;
+            lasers_update_[i] = true;		// 所有雷达数据的更新全部设置为true，// AMCLCMT 表示全部雷达数据需要更新  should update 
 
         force_publication = true;
 
         resample_count_ = 0;
     }
     // If the robot has moved, update the filter
-    else if (pf_init_ && lasers_update_[laser_index])
+    else if (pf_init_ && lasers_update_[laser_index])		// 
     {
         // printf("pose\n");
         // pf_vector_fprintf(pose, stdout, "%.3f");
 
         AMCLOdomData odata;
-        odata.pose = pose;
+        odata.pose = pose;		// pose是当前帧激光 所确定的base在odom中的位姿；
         // HACK
         // Modify the delta in the action data so the filter gets
         // updated correctly
-        odata.delta = delta;
+        odata.delta = delta;	// delta是pose-pf_odom_pose ：是当前帧减去上一帧是的位姿，也就是上一帧时刻后的位移增量
 
         // Use the action data to update the filter
         odom_->UpdateAction(pf_, (AMCLSensorData *)&odata);
@@ -1011,10 +1028,12 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         // Pose at last filter update
         // this->pf_odom_pose = pose;
     }
-
+/**************************************************************************************************************
+ * step4 : 传感器更新
+ **************************************************************************************************************/
     bool resampled = false;
-    // If the robot has moved, update the filter
-    if (lasers_update_[laser_index])
+    // If the robot has moved, update the filter			// AMCLCMT:  运动后更新滤波器
+    if (lasers_update_[laser_index])  		// 该激光雷达对应的容器中，更新了
     {
         AMCLLaserData ldata;
         ldata.sensor = lasers_[laser_index];
@@ -1025,19 +1044,19 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         //
         // Construct min and max angles of laser, in the base_link frame.
         tf2::Quaternion q;
-        q.setRPY(0.0, 0.0, laser_scan->angle_min);
+        q.setRPY(0.0, 0.0, laser_scan->angle_min);		// q是最小角度的四元数(-3.1415926 对应的q)
         geometry_msgs::QuaternionStamped min_q, inc_q;
         min_q.header.stamp = laser_scan->header.stamp;
-        min_q.header.frame_id = stripSlash(laser_scan->header.frame_id);
-        tf2::convert(q, min_q.quaternion);
+        min_q.header.frame_id = stripSlash(laser_scan->header.frame_id);		// min_q 的坐标系是laser
+        tf2::convert(q, min_q.quaternion);				// min_q 是最小角度的四元数
 
-        q.setRPY(0.0, 0.0, laser_scan->angle_min + laser_scan->angle_increment);
-        inc_q.header = min_q.header;
-        tf2::convert(q, inc_q.quaternion);
+        q.setRPY(0.0, 0.0, laser_scan->angle_min + laser_scan->angle_increment);	
+        inc_q.header = min_q.header;					// inc_q 的坐标系是laser
+        tf2::convert(q, inc_q.quaternion);				// inc_q 是最小角度的四元数+ 1分辨率
         try
         {
-            tf_->transform(min_q, min_q, base_frame_id_);
-            tf_->transform(inc_q, inc_q, base_frame_id_);
+            tf_->transform(min_q, min_q, base_frame_id_);		// 转换到base坐标系（laser坐标系的原点在base坐标系中的坐标）
+            tf_->transform(inc_q, inc_q, base_frame_id_);		
         }
         catch (const tf2::TransformException &e)
         {
@@ -1056,12 +1075,12 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
 
         // Apply range min/max thresholds, if the user supplied them
         if (laser_max_range_ > 0.0)
-            ldata.range_max = std::min(laser_scan->range_max, (float)laser_max_range_);
+            ldata.range_max = std::min(laser_scan->range_max, (float)laser_max_range_);		// ldata.range_max 设置激光距离的最大值：为laser_scan中最值或者是配置值，中偏小的那个
         else
             ldata.range_max = laser_scan->range_max;
         double range_min;
         if (laser_min_range_ > 0.0)
-            range_min = std::max(laser_scan->range_min, (float)laser_min_range_);
+            range_min = std::max(laser_scan->range_min, (float)laser_min_range_);		// range_min :设置的激光测距最小值，配置者和laser_scan中的较小的那个
         else
             range_min = laser_scan->range_min;
 
@@ -1072,27 +1091,27 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         }
 
         // The AMCLLaserData destructor will free this memory
-        ldata.ranges = new double[ldata.range_count][2];
-        ROS_ASSERT(ldata.ranges);
+        ldata.ranges = new double[ldata.range_count][2];		// AMCLCMT ranges的类型为: double (*ranges)[2];   
+        ROS_ASSERT(ldata.ranges);		// ranges[2] 两个元素，第一个表示距离，第二个表示角度；
         for (int i = 0; i < ldata.range_count; i++)
         {
             // amcl doesn't (yet) have a concept of min range.  So we'll map short
             // readings to max range.
             if (laser_scan->ranges[i] <= range_min)
-                ldata.ranges[i][0] = ldata.range_max;
-            else if (laser_scan->ranges[i] > ldata.range_max)
-                ldata.ranges[i][0] = std::numeric_limits<decltype(ldata.range_max)>::max();
+                ldata.ranges[i][0] = ldata.range_max;		// 测量距离小于设置的最小值，则ranges[i][0] = range_max
+            else if (laser_scan->ranges[i] > ldata.range_max)		// 测量距离大于设置的最大值，则ranges[i][0] = double的max()
+                ldata.ranges[i][0] = std::numeric_limits<decltype(ldata.range_max)>::max();	// decltype() 根据变量进行类型推断； std::numeric_limits<TYPE>::max(); 获取某种类型的最大值
             else
-                ldata.ranges[i][0] = laser_scan->ranges[i];
+                ldata.ranges[i][0] = laser_scan->ranges[i];		// 满足距离要求
             // Compute bearing
             ldata.ranges[i][1] = angle_min +
-                                 (i * angle_increment);
+                                 (i * angle_increment);		// ranges[i][1] 角度
         }
 
         lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData *)&ldata);
 
-        lasers_update_[laser_index] = false;
-
+        lasers_update_[laser_index] = false;			// AMCLCMT 对激光扫描数据执行完UpdateSensor之后，就表名该雷达数据已经更新了，所以此处lasers_update[laser_index] 设置为false
+														// 就表示不再更新了
         pf_odom_pose_ = pose;
 
         // Resample the particles
@@ -1207,7 +1226,7 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
                }
              */
 
-            pose_pub_.publish(p);
+            pose_pub_.publish(p);			// AMCLCMT : 发布最大权重的集群的pose统计值
             last_published_pose = p;
 
             ROS_DEBUG("New pose: %6.3f %6.3f %6.3f",
@@ -1221,14 +1240,15 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
             {
                 tf2::Quaternion q;
                 q.setRPY(0, 0, hyps[max_weight_hyp].pf_pose_mean.v[2]);
+				// AMCLCMT：tmp_tf是base_link在global map下的坐标，即base-->map
                 tf2::Transform tmp_tf(q, tf2::Vector3(hyps[max_weight_hyp].pf_pose_mean.v[0],
                                                       hyps[max_weight_hyp].pf_pose_mean.v[1],
-                                                      0.0));        // 还没看懂，猜猜tmp_tf表示的是粒子在map（也就是base @ map）的坐标关系；
+                                                      0.0));        // 
 
                 geometry_msgs::PoseStamped tmp_tf_stamped;
                 tmp_tf_stamped.header.frame_id = base_frame_id_;        // tmp_tf_stamped   坐标系为base
                 tmp_tf_stamped.header.stamp = laser_scan->header.stamp;
-                tf2::toMsg(tmp_tf.inverse(), tmp_tf_stamped.pose);      // 将tmp_tf变换取inverse(),得到的是map->base的变换； 将这个变换的位姿存入tmp_tf_stamped.pose中；
+                tf2::toMsg(tmp_tf.inverse(), tmp_tf_stamped.pose);      // 将tmp_tf变换取inverse(),得到的是map->base_link的变换； 将这个变换的位姿存入tmp_tf_stamped.pose中；
 
                 this->tf_->transform(tmp_tf_stamped, odom_to_map, odom_frame_id_);      // 应该是把map->base的坐标，变换成map->odom的坐标，将这个位姿保存在odom_to_map
             }       // 所以odom_to_map ：保存的是map在odom下的位姿
@@ -1237,7 +1257,7 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
                 ROS_DEBUG("Failed to subtract base to odom transform");
                 return;
             }
-// tf2::Transform latest_tf_;  构造函数中的声明
+		// tf2::Transform latest_tf_;  构造函数中的声明  
             tf2::convert(odom_to_map.pose, latest_tf_);     // latest_tf_ 保存的是map->odom的变换；
             latest_tf_valid_ = true;
 
@@ -1275,7 +1295,7 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
             tmp_tf_stamped.header.frame_id = global_frame_id_;
             tmp_tf_stamped.header.stamp = transform_expiration;
             tmp_tf_stamped.child_frame_id = odom_frame_id_;
-            tf2::convert(latest_tf_.inverse(), tmp_tf_stamped.transform);
+            tf2::convert(latest_tf_.inverse(), tmp_tf_stamped.transform);		// AMCLCMT ：tmp_tf_stamped这个变换是odom原点在map坐标系的坐标，即odom-->map
             this->tfb_->sendTransform(tmp_tf_stamped);
         }
 
@@ -1323,11 +1343,11 @@ void AmclNode::handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceS
     geometry_msgs::TransformStamped tx_odom;
     try
     {
-        // wait a little for the latest tf to become available
-        tx_odom = tf_->lookupTransform(base_frame_id_, msg.header.stamp,
-                                       base_frame_id_, ros::Time::now(),
-                                       odom_frame_id_, ros::Duration(0.5));
-    }
+        // wait a little for the latest tf to become available		// 调用了 lookuptransform的高级接口，含有6个参数
+        tx_odom = tf_->lookupTransform(base_frame_id_, msg.header.stamp,		// 现在时间，与收到的激光雷达的时间戳是有区别的，此处是获取，在当前时间与时间戳上相差的这一点时间内，base_link的变化
+                                       base_frame_id_, ros::Time::now(),		// 此行是子坐标系，所以表示的是，当前时刻在时间戳时的坐标系下的坐标变换关系
+                                       odom_frame_id_, ros::Duration(0.5));		// 把odom坐标系作为固定坐标系
+    }	// tx_odom 现在的base相对于时间戳里的base 的坐标关系
     catch (const tf2::TransformException &e)
     {
         // If we've never sent a transform, then this is normal, because the
@@ -1340,9 +1360,9 @@ void AmclNode::handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceS
     }
 
     tf2::Transform tx_odom_tf2;
-    tf2::convert(tx_odom.transform, tx_odom_tf2);
+    tf2::convert(tx_odom.transform, tx_odom_tf2);		// tx_odom_tf2: 是base_link之间（两个时间戳之间的base_link是有位姿上的差异的）的相对关系
     tf2::Transform pose_old, pose_new;
-    tf2::convert(msg.pose.pose, pose_old);
+    tf2::convert(msg.pose.pose, pose_old);				// msg是相对于map坐标系的一个初始位姿
     pose_new = pose_old * tx_odom_tf2;
 
     // Transform into the global frame
@@ -1380,7 +1400,7 @@ void AmclNode::handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceS
  * pose to the particle filter state.  initial_pose_hyp_ is deleted
  * and set to NULL after it is used.
  */
-void AmclNode::applyInitialPose()
+void AmclNode::applyInitialPose()		// 使用获得的初始位姿，初始化粒子滤波器pf_
 {
     boost::recursive_mutex::scoped_lock cfl(configuration_mutex_);
     if (initial_pose_hyp_ != NULL && map_ != NULL)      // initial_pose_hyp_非空和map_地图对象也有的情况下，才执行后续代码

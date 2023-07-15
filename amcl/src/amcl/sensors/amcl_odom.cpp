@@ -113,51 +113,47 @@ AMCLOdom::SetModel( odom_model_t type,
 bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
 {
   AMCLOdomData *ndata;
-  ndata = (AMCLOdomData*) data;     // data是AMCLSensorData数据，将其转换为AMCLOdomData类型
+  ndata = (AMCLOdomData*) data;     // 指针类型的转换
 
   // Compute the new sample poses
   pf_sample_set_t *set;
 
   set = pf->sets + pf->current_set;
   pf_vector_t old_pose = pf_vector_sub(ndata->pose, ndata->delta);      // 执行ndata->pose  sub ndata->delta  两个位置矢量相减
-                                                            // AMCLOdomData中的pose表示变化之后的位姿，delta表示位姿的变化量； old_pose = pose - delta
+                                                            			// AMCLOdomData中的pose表示变化之后的位姿，delta表示位姿的变化量； old_pose = pose - delta
+// pose是当前的位姿，old_pose上上一帧时的位姿																		
   switch( this->model_type )
   {
-  case ODOM_MODEL_OMNI:     /////////////////////////////////////////////// 全向里程计运动模型
+  case ODOM_MODEL_OMNI:     ///////////////////////////////////////////// // 全向里程计运动模型
   {
     double delta_trans, delta_rot, delta_bearing;
     double delta_trans_hat, delta_rot_hat, delta_strafe_hat;
 
-    delta_trans = sqrt(ndata->delta.v[0]*ndata->delta.v[0] +
-                       ndata->delta.v[1]*ndata->delta.v[1]);
-    delta_rot = ndata->delta.v[2];
+    delta_trans = sqrt(ndata->delta.v[0]*ndata->delta.v[0] + ndata->delta.v[1]*ndata->delta.v[1]);
+                       		// 也就是sqrt(x^2 + y^2)
+    delta_rot = ndata->delta.v[2];									
+							// 即 theta
 
     // Precompute a couple of things
-    double trans_hat_stddev = (alpha3 * (delta_trans*delta_trans) +
-                               alpha1 * (delta_rot*delta_rot));
-    double rot_hat_stddev = (alpha4 * (delta_rot*delta_rot) +
-                             alpha2 * (delta_trans*delta_trans));
-    double strafe_hat_stddev = (alpha1 * (delta_rot*delta_rot) +
-                                alpha5 * (delta_trans*delta_trans));
+    double trans_hat_stddev =  (alpha3 * (delta_trans*delta_trans) + alpha1 * (delta_rot*delta_rot));
+    double rot_hat_stddev =    (alpha4 * (delta_rot*delta_rot)     + alpha2 * (delta_trans*delta_trans));
+    double strafe_hat_stddev = (alpha1 * (delta_rot*delta_rot)     + alpha5 * (delta_trans*delta_trans));
 
-    for (int i = 0; i < set->sample_count; i++)
+    for (int i = 0; i < set->sample_count; i++)		// 遍历pf中的所有粒子
     {
-      pf_sample_t* sample = set->samples + i;
+      pf_sample_t* sample = set->samples + i;		// sample粒子
 
-      delta_bearing = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]),
-                                 old_pose.v[2]) + sample->pose.v[2];
+      delta_bearing = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]), old_pose.v[2])         + sample->pose.v[2];
       double cs_bearing = cos(delta_bearing);
       double sn_bearing = sin(delta_bearing);
 
       // Sample pose differences
-      delta_trans_hat = delta_trans + pf_ran_gaussian(trans_hat_stddev);
-      delta_rot_hat = delta_rot + pf_ran_gaussian(rot_hat_stddev);
+      delta_trans_hat  = delta_trans + pf_ran_gaussian(trans_hat_stddev);
+      delta_rot_hat    = delta_rot + pf_ran_gaussian(rot_hat_stddev);
       delta_strafe_hat = 0 + pf_ran_gaussian(strafe_hat_stddev);
       // Apply sampled update to particle pose
-      sample->pose.v[0] += (delta_trans_hat * cs_bearing + 
-                            delta_strafe_hat * sn_bearing);
-      sample->pose.v[1] += (delta_trans_hat * sn_bearing - 
-                            delta_strafe_hat * cs_bearing);
+      sample->pose.v[0] += (delta_trans_hat * cs_bearing +  delta_strafe_hat * sn_bearing);
+      sample->pose.v[1] += (delta_trans_hat * sn_bearing -  delta_strafe_hat * cs_bearing);
       sample->pose.v[2] += delta_rot_hat ;
     }
   }
@@ -176,9 +172,11 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
       delta_rot1 = 0.0;
     else
       delta_rot1 = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]), old_pose.v[2]);      // 使用atan2计算delta这段位移的夹角，然后减去old_pose[3]也就是theta，就可以得到 rot1
+				// 《概率机器人》 p103 程序5.6 line：2
     delta_trans = sqrt(ndata->delta.v[0]*ndata->delta.v[0] + ndata->delta.v[1]*ndata->delta.v[1]);
+				// 《概率机器人》 p103 程序5.6 line：3
     delta_rot2 = angle_diff(ndata->delta.v[2], delta_rot1);     // delta.v[3]是两个位姿之间的夹角，pose.theta - old_pose.theta，由于rot1已经求得，所以rot2 = 两者差值；
-
+				// 《概率机器人》 p103 程序5.6 line：4
     // We want to treat backward and forward motion symmetrically for the
     // noise model to be applied below.  The standard model seems to assume
     // forward motion.
@@ -193,15 +191,11 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
 
       // Sample pose differences
       delta_rot1_hat = angle_diff(delta_rot1,
-                                  pf_ran_gaussian(this->alpha1*delta_rot1_noise*delta_rot1_noise +
-                                                  this->alpha2*delta_trans*delta_trans));
+                                  pf_ran_gaussian(this->alpha1*delta_rot1_noise*delta_rot1_noise + this->alpha2*delta_trans*delta_trans));
       delta_trans_hat = delta_trans - 
-              pf_ran_gaussian(this->alpha3*delta_trans*delta_trans +
-                              this->alpha4*delta_rot1_noise*delta_rot1_noise +
-                              this->alpha4*delta_rot2_noise*delta_rot2_noise);
+              		pf_ran_gaussian(this->alpha3*delta_trans*delta_trans +  this->alpha4*delta_rot1_noise*delta_rot1_noise +  this->alpha4*delta_rot2_noise*delta_rot2_noise);
       delta_rot2_hat = angle_diff(delta_rot2,
-                                  pf_ran_gaussian(this->alpha1*delta_rot2_noise*delta_rot2_noise +
-                                                  this->alpha2*delta_trans*delta_trans));
+                                  pf_ran_gaussian(this->alpha1*delta_rot2_noise*delta_rot2_noise +  this->alpha2*delta_trans*delta_trans));
 
       // Apply sampled update to particle pose
       sample->pose.v[0] += delta_trans_hat * 

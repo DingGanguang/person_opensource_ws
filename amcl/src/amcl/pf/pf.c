@@ -83,13 +83,13 @@ pf_t *pf_alloc(int min_samples, int max_samples,
 																 // 内存中包含【max_samples】个粒子对象
 																 // 一个 set->samples 的内存占用： 32*max_samples 字节
 																 // 设置每个粒子集的：粒子数，所有粒子的初始化；
-		for (i = 0; i < set->sample_count; i++)
+		for (i = 0; i < set->sample_count; i++)		// 每个set中的例子数=max_samples
 		{
 			sample = set->samples + i;
 			sample->pose.v[0] = 0.0;
 			sample->pose.v[1] = 0.0;
 			sample->pose.v[2] = 0.0;
-			sample->weight = 1.0 / max_samples; // 为粒子集中的每个粒子设置位姿=0，权重= 1/sample_count
+			sample->weight = 1.0 / max_samples; 		// 为粒子集中的每个粒子设置位姿(0,0,0) x=0,y=0,theta=0，  权重= 1/sample_count
 		}
 
 		// HACK: is 3 times max_samples enough?
@@ -101,8 +101,8 @@ pf_t *pf_alloc(int min_samples, int max_samples,
 		set->clusters = calloc(set->cluster_max_count, sizeof(pf_cluster_t));
 		// 一个 set->clusters 的内存占用：176*max_samples 字节
 		//一个pf滤波器有2个set，粗略计算内存占用，以5000个粒子为例：5000*(32+176)*2/1024/1024 = 1.98 m,         2M的内存，对于嵌入式来说可能很大吧
-		set->mean = pf_vector_zero();
-		set->cov = pf_matrix_zero();
+		set->mean = pf_vector_zero();		
+		set->cov = pf_matrix_zero();			// 当前粒子集合的 位姿均值与协方差 都设置为 零向量和零矩阵
 	}
 
 	pf->w_slow = 0.0;

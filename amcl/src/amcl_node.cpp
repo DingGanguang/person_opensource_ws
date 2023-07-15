@@ -1150,7 +1150,8 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
     if (frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end())		  // frame_to_laser_ map中没有laser_link的坐标系 的分支
     {
         ROS_DEBUG("Setting up laser %d (frame_id=%s)\n", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
-        lasers_.push_back(new AMCLLaser(*laser_));
+        lasers_.push_back(new AMCLLaser(*laser_));		// 首先新建一个雷达数据对象（默认构造的），放入lasers_容器中；
+					// 故lasers_容器中，存放的是所有雷达的雷达数据对象；
         lasers_update_.push_back(true);
         laser_index = frame_to_laser_.size();		// laser_index = 0
 
@@ -1178,7 +1179,7 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
         laser_pose_v.v[1] = laser_pose.pose.position.y;
         // laser mounting angle gets computed later -> set to 0 here!
         laser_pose_v.v[2] = 0;
-        lasers_[laser_index]->SetLaserPose(laser_pose_v);
+        lasers_[laser_index]->SetLaserPose(laser_pose_v);		// 利用tf求出雷达坐标系的原点在base_link下的坐标，然后调用SetLaserPose设置雷达的位姿，angle暂时为0
         ROS_DEBUG("Received laser's pose wrt robot: %.3f %.3f %.3f",
                   laser_pose_v.v[0],
                   laser_pose_v.v[1],
@@ -1197,20 +1198,21 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
     if (!getOdomPose(latest_odom_pose_, pose.v[0], pose.v[1], pose.v[2],       
                      laser_scan->header.stamp, base_frame_id_))  
                      // getOdomPose() 将base在odom中的位姿，保存在 latest_odom_pose_ 中，所以"latest_odom_pose_"保存的就是base->odom的坐标变换；
-//AMCLCMT: latest_odom_pose_ 保存的是base_link坐标系的原点在odom坐标系中的坐标，也就是机器人在odom中的坐标                     
+// AMCLCMT: latest_odom_pose_ 保存的是base_link坐标系的原点在odom坐标系中的坐标，也就是机器人在odom中的坐标                     
 
     {
         ROS_ERROR("Couldn't determine robot's pose associated with laser scan");
         return;
     }
 
-    pf_vector_t delta = pf_vector_zero();
-
+    pf_vector_t delta = pf_vector_zero();		// delta记录里程计的变化
+// AMCLCMT: 预备工作完成之后，pf_init_ = false
     if (pf_init_)
     {
+		// pf_odom_pose_ 是第一次收到激光雷达时，base在odom中的位置  此分支是第二次收到激光数据，pose是此时base在odom中的位姿，所以delta是两帧之间的变化
         // Compute change in pose
         // delta = pf_vector_coord_sub(pose, pf_odom_pose_);
-        delta.v[0] = pose.v[0] - pf_odom_pose_.v[0];
+        delta.v[0] = pose.v[0] - pf_odom_pose_.v[0];			
         delta.v[1] = pose.v[1] - pf_odom_pose_.v[1];
         delta.v[2] = angle_diff(pose.v[2], pf_odom_pose_.v[2]);
 
@@ -1228,17 +1230,16 @@ void AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr &laser_scan) /
     }
 
     bool force_publication = false;
-    if (!pf_init_)
+    if (!pf_init_)		// AMCLCMT 【这里首先执行】在接收雷达数据之前，pf_init_ =false，所以初始化操作之后，此分支一定执行，第二帧数据之后，上述的if(pf_init_)分支必定执行
     {
         // Pose at last filter update
-        pf_odom_pose_ = pose;
-
+        pf_odom_pose_ = pose;			// 接收到一帧激光数据时，pose是机器人的odom位姿
         // Filter is now initialized
         pf_init_ = true;
 
         // Should update sensor data
         for (unsigned int i = 0; i < lasers_update_.size(); i++)
-            lasers_update_[i] = true;
+            lasers_update_[i] = true;		// 表示所有的雷达数据都更新了？
 
         force_publication = true;
 
